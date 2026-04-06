@@ -4,9 +4,9 @@ function scrollToSection(id) {
   if (el) el.scrollIntoView({ behavior: 'smooth' });
 }
 
-// ── menu hamburger ──
+// ── menu celular ──
 var hamburger = document.getElementById('hamburger');
-var navLinks  = document.getElementById('navLinks');
+var navLinks = document.getElementById('navLinks');
 
 if (hamburger && navLinks) {
   hamburger.addEventListener('click', function () {
@@ -21,7 +21,7 @@ document.querySelectorAll('.nav-links a').forEach(function (link) {
   });
 });
 
-// ── navbar scroll – compactar e dar sombra ao rolar ──
+// ── barra do topo menor ao rolar ──
 (function () {
   var nav = document.querySelector('nav');
   if (!nav) return;
@@ -41,7 +41,7 @@ document.querySelectorAll('.nav-links a').forEach(function (link) {
   }, { passive: true });
 })();
 
-// ── parallax herói ──
+// ── foto de fundo se mover mais devagar que o resto──
 var heroBg = document.getElementById('heroBg');
 if (heroBg) {
   window.addEventListener('scroll', function () {
@@ -50,7 +50,7 @@ if (heroBg) {
   }, { passive: true });
 }
 
-// ── scroll reveal com IntersectionObserver ──
+// ── pequena animacao ──
 var reveals = document.querySelectorAll('.reveal');
 if ('IntersectionObserver' in window) {
   var revealObs = new IntersectionObserver(function (entries) {
@@ -67,29 +67,38 @@ if ('IntersectionObserver' in window) {
   reveals.forEach(function (el) { el.classList.add('visible'); });
 }
 
-// ── carrossel ──
+// ── carrossel  ──
 (function () {
-  var track    = document.getElementById('carouselTrack');
+  var track = document.getElementById('carouselTrack');
   var dotsWrap = document.getElementById('carouselDots');
-  var prevBtn  = document.querySelector('.carousel-btn.prev');
-  var nextBtn  = document.querySelector('.carousel-btn.next');
+  var prevBtn = document.querySelector('.carousel-btn.prev');
+  var nextBtn = document.querySelector('.carousel-btn.next');
 
   if (!track) return;
 
-  var slides   = track.querySelectorAll('.carousel-slide');
-  var total    = slides.length;
-  var current  = 0;
+  var originalSlides = Array.from(track.querySelectorAll('.carousel-slide'));
+  var total = originalSlides.length;
+  var current = total; // começa no primeiro slide real
+  var isTransitioning = false;
   var autoTimer;
-  var GAP      = 16;
+  var GAP = 16;
 
-  // criar dots
+  // Clona slides no início e no fim para loop infinito
+  originalSlides.forEach(function (slide) {
+    track.appendChild(slide.cloneNode(true));
+  });
+  originalSlides.slice().reverse().forEach(function (slide) {
+    track.insertBefore(slide.cloneNode(true), track.firstChild);
+  });
+
+  // criar bolinha carrossel
   for (var i = 0; i < total; i++) {
     var dot = document.createElement('button');
     dot.className = 'carousel-dot' + (i === 0 ? ' active' : '');
     dot.setAttribute('aria-label', 'Slide ' + (i + 1));
     dot.dataset.idx = i;
     dot.addEventListener('click', function () {
-      goTo(parseInt(this.dataset.idx));
+      goTo(parseInt(this.dataset.idx) + total);
       resetAuto();
     });
     dotsWrap.appendChild(dot);
@@ -99,42 +108,58 @@ if ('IntersectionObserver' in window) {
 
   function visibleCount() {
     var w = window.innerWidth;
-    if (w <= 480) return 1;
-    if (w <= 768) return 1;
-    return 3;
+    return (w <= 768) ? 1 : 3;
   }
 
   function slideWidth() {
-    var vc    = visibleCount();
+    var vc = visibleCount();
     var outer = track.parentElement.clientWidth;
     return (outer - GAP * (vc - 1)) / vc;
   }
 
-  function goTo(idx) {
-    var vc  = visibleCount();
-    var max = Math.max(total - vc, 0);
-    if (idx > max) idx = 0;
-    if (idx < 0) idx = max;
-    current = idx;
-    var sw  = slideWidth();
-    track.style.transform = 'translateX(-' + (current * (sw + GAP)) + 'px)';
+  function updateDots() {
+    var realIndex = ((current - total) % total + total) % total;
     dots.forEach(function (d, i) {
-      d.classList.toggle('active', i === current);
+      d.classList.toggle('active', i === realIndex);
     });
   }
+
+  function goTo(idx, animate) {
+    if (isTransitioning) return;
+    if (animate !== false) isTransitioning = true;
+
+    current = idx;
+    var sw = slideWidth();
+    track.style.transition = (animate === false)
+      ? 'none'
+      : 'transform 0.45s cubic-bezier(0.4,0,0.2,1)';
+    track.style.transform = 'translateX(-' + (current * (sw + GAP)) + 'px)';
+    updateDots();
+  }
+
+  // Após a transição, teleporta silenciosamente se estiver num clone
+  track.addEventListener('transitionend', function () {
+    isTransitioning = false;
+
+    if (current < total) {
+      goTo(current + total, false);
+    } else if (current >= total * 2) {
+      goTo(current - total, false);
+    }
+  });
 
   function next() { goTo(current + 1); }
   function prev() { goTo(current - 1); }
 
   function startAuto() { autoTimer = setInterval(next, 4000); }
-  function resetAuto()  { clearInterval(autoTimer); startAuto(); }
+  function resetAuto() { clearInterval(autoTimer); startAuto(); }
 
   if (prevBtn) prevBtn.addEventListener('click', function () { prev(); resetAuto(); });
   if (nextBtn) nextBtn.addEventListener('click', function () { next(); resetAuto(); });
 
-  window.addEventListener('resize', function () { goTo(current); }, { passive: true });
+  window.addEventListener('resize', function () { goTo(current, false); }, { passive: true });
 
-  // suporte a touch/swipe
+  // Swipe
   var startX = 0;
   track.addEventListener('touchstart', function (e) {
     startX = e.touches[0].clientX;
@@ -144,13 +169,17 @@ if ('IntersectionObserver' in window) {
     if (Math.abs(diff) > 40) { diff > 0 ? next() : prev(); resetAuto(); }
   });
 
+  // passar mause
+  track.parentElement.addEventListener('mouseenter', function () { clearInterval(autoTimer); });
+  track.parentElement.addEventListener('mouseleave', function () { startAuto(); });
+
+  goTo(current, false);
   startAuto();
-  goTo(0);
 })();
 
-// ── 3D tilt nos cards (sobre, ingredientes) ──
+// ──  inclinar card d ingrediente ──
 (function () {
-  if (window.innerWidth < 768) return; // desativar no mobile
+  if (window.innerWidth < 768) return;
 
   var cards = document.querySelectorAll('.card, .ing-card');
 
@@ -174,9 +203,7 @@ if ('IntersectionObserver' in window) {
   });
 })();
 
-// ── contador animado — "número" que sobe (futuro uso) ──
-
-// ── efeito de partículas de cookie no hover do produto ──
+// ── partículas de cookie ──
 (function () {
   var produtoWrap = document.querySelector('.produto-img-wrap');
   if (!produtoWrap || window.innerWidth < 768) return;
@@ -190,7 +217,7 @@ if ('IntersectionObserver' in window) {
   function createCookieParticle(parent) {
     var particle = document.createElement('span');
     particle.textContent = '🍪';
-    particle.style.cssText = 
+    particle.style.cssText =
       'position:absolute;' +
       'font-size:' + (14 + Math.random() * 16) + 'px;' +
       'pointer-events:none;' +
@@ -203,7 +230,7 @@ if ('IntersectionObserver' in window) {
     parent.appendChild(particle);
 
     requestAnimationFrame(function () {
-      particle.style.transform = 
+      particle.style.transform =
         'translateY(-' + (60 + Math.random() * 80) + 'px) ' +
         'translateX(' + (-40 + Math.random() * 80) + 'px) ' +
         'rotate(' + (Math.random() * 360) + 'deg) scale(0.3)';
@@ -216,7 +243,7 @@ if ('IntersectionObserver' in window) {
   }
 })();
 
-// ── active nav link highlight on scroll ──
+// ── link do menu acende conforme a secao──
 (function () {
   var sections = document.querySelectorAll('section[id]');
   var navLinksAll = document.querySelectorAll('.nav-links a');
